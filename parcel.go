@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 )
 
 type ParcelStore struct {
@@ -14,40 +15,98 @@ func NewParcelStore(db *sql.DB) ParcelStore {
 
 func (s ParcelStore) Add(p Parcel) (int, error) {
 	// реализуйте добавление строки в таблицу parcel, используйте данные из переменной p
+	query := `INSERT INTO parcel (client, status, address, created_at) VALUES (?, ?, ?, ?)`
+
+	res, err := s.db.Exec(query, p.Client, p.Status, p.Address, p.CreatedAt)
+	if err != nil {
+		return 0, err // Если ошибка, возвращаем 0 и ошибку
+	}
 
 	// верните идентификатор последней добавленной записи
-	return 0, nil
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+
+	return int(id), nil
 }
 
 func (s ParcelStore) Get(number int) (Parcel, error) {
 	// реализуйте чтение строки по заданному number
+	query := `SELECT number, client, status, address, created_at FROM parcel WHERE number = ?`
 	// здесь из таблицы должна вернуться только одна строка
-
+	row := s.db.QueryRow(query, number)
 	// заполните объект Parcel данными из таблицы
 	p := Parcel{}
-
-	return p, nil
+	err := row.Scan(&p.Number, &p.Client, &p.Status, &p.Address, &p.CreatedAt)
+	if err != nil {
+		return Parcel{}, err
+	}
+	return p, err
 }
 
 func (s ParcelStore) GetByClient(client int) ([]Parcel, error) {
 	// реализуйте чтение строк из таблицы parcel по заданному client
+	query := `SELECT * FROM parcel WHERE client = ?`
 	// здесь из таблицы может вернуться несколько строк
-
+	rows, err := s.db.Query(query, client)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 	// заполните срез Parcel данными из таблицы
 	var res []Parcel
 
+	for rows.Next() {
+		var p Parcel
+		// Сканируем текущую строку в временную структуру p
+		// Порядок полей тот же: number, client, status, address, created_at
+		err := rows.Scan(&p.Number, &p.Client, &p.Status, &p.Address, &p.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, p)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 
 func (s ParcelStore) SetStatus(number int, status string) error {
 	// реализуйте обновление статуса в таблице parcel
+	query := `UPDATE parcel SET status = ? WHERE number = ?`
+
+	_, err := s.db.Exec(query, status, number)
+
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func (s ParcelStore) SetAddress(number int, address string) error {
-	// реализуйте обновление адреса в таблице parcel
-	// менять адрес можно только если значение статуса registered
+
+	query := `UPDATE parcel SET address = ? WHERE number = ? AND status = ?`
+
+	res, err := s.db.Exec(query, address, number, ParcelStatusRegistered)
+	if err != nil {
+		return err // Если база вообще сломалась - возвращаем ошибку
+	}
+
+	// Проверяем, сколько строк реально обновилось
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	// Если rowsAffected == 0, значит либо посылки нет, либо статус не 'registered'
+	if rowsAffected == 0 {
+
+		return fmt.Errorf("не удалось изменить адрес: посылка с номером %d не найдена или имеет недопустимый статус", number)
+	}
 
 	return nil
 }
@@ -55,6 +114,29 @@ func (s ParcelStore) SetAddress(number int, address string) error {
 func (s ParcelStore) Delete(number int) error {
 	// реализуйте удаление строки из таблицы parcel
 	// удалять строку можно только если значение статуса registered
+	queryCheck := `SELECT status FROM parcel WHERE number = ?`
+	var currentStatus string
+
+	// Используем QueryRow, так как нам нужна ровно одна строка
+	err := s.db.QueryRow(queryCheck, number).Scan(&currentStatus)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("посылка с номером %d не найдена", number)
+		}
+		return err
+	}
+
+	// 2. ПРОВЕРКА: удалять можно ТОЛЬКО если статус "registered"
+	if currentStatus != ParcelStatusRegistered {
+		return fmt.Errorf("нельзя удалить посылку со статусом '%s', разрешен только статус '%s'", currentStatus, ParcelStatusRegistered)
+	}
+
+	// 3. Если всё ок — удаляем
+	queryDelete := `DELETE FROM parcel WHERE number = ?`
+	_, err = s.db.Exec(queryDelete, number)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
