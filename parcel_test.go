@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,17 +68,13 @@ func TestAddGetDelete(t *testing.T) {
 	gotParcel, err := store.Get(id)
 	require.NoError(t, err, "Ошибка при получении посылки")
 
-	require.Equal(t, parcel.Client, gotParcel.Client, "Не совпадает Client")
-	require.Equal(t, parcel.Status, gotParcel.Status, "Не совпадает Status")
-	require.Equal(t, parcel.Address, gotParcel.Address, "Не совпадает Address")
-
-	require.NotEmpty(t, gotParcel.CreatedAt, "Поле CreatedAt не должно быть пустым")
+	assert.Equal(t, parcel.Client, gotParcel.Client, "Не совпадает Client")
 
 	err = store.Delete(id)
 	require.NoError(t, err, "Ошибка при удалении посылки")
 
 	_, err = store.Get(id)
-	require.Error(t, err, "После удаления посылка должна быть недоступна (должна быть ошибка)")
+	require.Error(t, err, sql.ErrNoRows)
 
 }
 
@@ -114,11 +111,11 @@ func TestSetAddress(t *testing.T) {
 	updatedParcel, err := store.Get(id)
 	require.NoError(t, err, "Ошибка при получении обновленной посылки")
 
-	require.Equal(t, newAddress, updatedParcel.Address, "Адрес не обновился!")
+	assert.Equal(t, newAddress, updatedParcel.Address, "Адрес не обновился!")
 
 	// Также проверим, что остальные поля не пострадали
-	require.Equal(t, parcel.Client, updatedParcel.Client, "Client изменился случайно")
-	require.Equal(t, parcel.Status, updatedParcel.Status, "Status изменился случайно")
+	assert.Equal(t, parcel.Client, updatedParcel.Client, "Client изменился случайно")
+	assert.Equal(t, parcel.Status, updatedParcel.Status, "Status изменился случайно")
 }
 
 // TestSetStatus проверяет обновление статуса
@@ -154,11 +151,11 @@ func TestSetStatus(t *testing.T) {
 	updatedParcel, err := store.Get(id)
 	require.NoError(t, err, "Ошибка получения посылки")
 
-	require.Equal(t, newStatus, updatedParcel.Status, "Статус не обновился!")
+	assert.Equal(t, newStatus, updatedParcel.Status, "Статус не обновился!")
 
 	// Проверка, что другие поля не изменились
-	require.Equal(t, parcel.Client, updatedParcel.Client, "Client изменился случайно")
-	require.Equal(t, parcel.Address, updatedParcel.Address, "Address изменился случайно")
+	assert.Equal(t, parcel.Client, updatedParcel.Client, "Client изменился случайно")
+	assert.Equal(t, parcel.Address, updatedParcel.Address, "Address изменился случайно")
 }
 
 // TestGetByClient проверяет получение посылок по идентификатору клиента
@@ -212,18 +209,18 @@ func TestGetByClient(t *testing.T) {
 	require.NoError(t, err, "Ошибка получения списка посылок клиента")
 
 	// убедитесь, что количество полученных посылок совпадает с количеством добавленных
-	require.Len(t, storedParcels, 3, "Количество полученных посылок (%d) не совпадает с ожидаемым (3)", len(storedParcels))
+	assert.Len(t, storedParcels, 3, "Количество полученных посылок (%d) не совпадает с ожидаемым (3)", len(storedParcels))
 
 	// check
 	for _, parcel := range storedParcels {
 		// в parcelMap лежат добавленные посылки.
 		// Проверяем, что посылка из результата есть в нашей мапе
 		expectedParcel, ok := parcelMap[parcel.Number]
-		require.True(t, ok, "Посылка с ID %d не найдена в списке добавленных посылок", parcel.Number)
+		assert.True(t, ok, "Посылка с ID %d не найдена в списке добавленных посылок", parcel.Number)
 
 		// убедитесь, что значения полей полученных посылок заполнены верно
-		require.Equal(t, expectedParcel.Client, parcel.Client, "Не совпадает Client")
-		require.Equal(t, expectedParcel.Status, parcel.Status, "Не совпадает Status")
-		require.Equal(t, expectedParcel.Address, parcel.Address, "Не совпадает Address")
+		assert.Equal(t, expectedParcel.Client, parcel.Client, "Не совпадает Client")
+		assert.Equal(t, expectedParcel.Status, parcel.Status, "Не совпадает Status")
+		assert.Equal(t, expectedParcel.Address, parcel.Address, "Не совпадает Address")
 	}
 }

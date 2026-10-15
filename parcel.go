@@ -33,16 +33,16 @@ func (s ParcelStore) Add(p Parcel) (int, error) {
 
 func (s ParcelStore) Get(number int) (Parcel, error) {
 	// реализуйте чтение строки по заданному number
-	query := `SELECT * FROM parcel WHERE number = ?`
+	query := `SELECT number, client, status, address, created_at FROM parcel WHERE number = ?`
 	// здесь из таблицы должна вернуться только одна строка
 	row := s.db.QueryRow(query, number)
 	// заполните объект Parcel данными из таблицы
 	p := Parcel{}
 	err := row.Scan(&p.Number, &p.Client, &p.Status, &p.Address, &p.CreatedAt)
 	if err != nil {
-		return p, err
+		return Parcel{}, err
 	}
-	return p, nil
+	return p, err
 }
 
 func (s ParcelStore) GetByClient(client int) ([]Parcel, error) {
@@ -88,28 +88,26 @@ func (s ParcelStore) SetStatus(number int, status string) error {
 }
 
 func (s ParcelStore) SetAddress(number int, address string) error {
-	// реализуйте обновление адреса в таблице parcel
-	// менять адрес можно только если значение статуса registered
-	queryCheck := `SELECT status FROM parcel WHERE number = ?`
-	var currentStatus string
-	err := s.db.QueryRow(queryCheck, number).Scan(&currentStatus)
+
+	query := `UPDATE parcel SET address = ? WHERE number = ? AND status = ?`
+
+	res, err := s.db.Exec(query, address, number, ParcelStatusRegistered)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return fmt.Errorf("посылка с номером %d не найдена", number)
-		}
-		return err
+		return err // Если база вообще сломалась - возвращаем ошибку
 	}
-	if currentStatus != ParcelStatusRegistered {
-		return fmt.Errorf(
-			"нельзя изменить адрес посылки со статусом '%s', разрешен только статус '%s'",
-			currentStatus, ParcelStatusRegistered,
-		)
-	}
-	queryUpdate := `UPDATE parcel SET address = ? WHERE number = ?`
-	_, err = s.db.Exec(queryUpdate, address, number)
+
+	// Проверяем, сколько строк реально обновилось
+	rowsAffected, err := res.RowsAffected()
 	if err != nil {
 		return err
 	}
+
+	// Если rowsAffected == 0, значит либо посылки нет, либо статус не 'registered'
+	if rowsAffected == 0 {
+
+		return fmt.Errorf("не удалось изменить адрес: посылка с номером %d не найдена или имеет недопустимый статус", number)
+	}
+
 	return nil
 }
 
